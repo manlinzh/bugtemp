@@ -1,4 +1,4 @@
-from models import Game, Value, StringMode
+from models import Game, Value, StringMode # type: ignore
 from typing import Optional
 
 """Position: [if player 1's turn, add 1 to the start; if Player 0, it is implicitly 0] + 19 tiles [what player is occupying] 1 if empty, 2 if white, 3 if black
@@ -126,7 +126,7 @@ class Bug(Game):
         """
         Define instance variables here (i.e. variant information)
         """
-        if variant_id not in Test.variants:
+        if variant_id not in Bug.variants:
             raise ValueError("Variant not defined")
         self._variant_id = variant_id
         pass
@@ -135,7 +135,7 @@ class Bug(Game):
         """
         Returns the starting position of the game.
         """
-        return 1
+        return 10**19 # 1 and 19 zeros
 
     def generate_moves(self, position: int) -> list[int]:
         """
@@ -204,7 +204,7 @@ class Bug(Game):
             for bug in eaters:
                 extended = []
                 for prefix in combinationalmoves:
-                    growboard = eatboard.copy()
+                    growboard = eatboard.copy() #type: ignore
                     for spot in prefix:
                         growboard.setitem(spot, player)
                     for spot in bug.try_grow(growboard):
@@ -214,7 +214,7 @@ class Bug(Game):
                 CombinationalMoves.append(premoves)
             else:
                 for suffix in combinationalmoves:
-                    possibleboard = eatboard.copy()
+                    possibleboard = eatboard.copy()  # type: ignore
                     for spot in suffix:
                         possibleboard.setitem(spot, player)
                     PostMultiverse.append(possibleboard)
@@ -232,36 +232,110 @@ class Bug(Game):
             combinationalstrings.append(int(digits))
         return combinationalstrings
 
+    def unpack(self, position:int, move:int):
+        """
+        Unpacks moves from tiles placed to all tiles changed (hopefully)
+        """
+        TILE_IDS = ['11', '12', '13',
+            '21', '22', '23', '24',
+            '31', '32', '33', '34', '35',
+            '41', '42', '43', '44',
+            '51', '52', '53']
+ 
+        s = str(move)
+        player = int(s[0])
+        # take every tile to be changed
+        tiles = [int(s[i:i+2]) for i in range(2, len(s), 2)]
+        board = Board(position, [])
+        output = []
+
+        # save all placed tiles to output
+        def record(spot, value):
+            tile_index = Board.spaces.index(spot) 
+            output.append(str(value) + self.TILE_IDS[tile_index])
+
+        # first tile is ordinary placement, the rest are growths
+        spot = Board.spaces[tiles[0] - 1]
+        board.setitem(spot, player)
+        record(spot, player)
+
+        i = 1
+        while i < len(tiles):
+            eaters, after = self.eat_round(board, player)
+            if not eaters:
+                raise ValueError(f"move {move} has growth tiles but nothing can eat")
+
+            # find eaten tiles
+            for spot in Board.spaces:
+                if board.getitem(spot) != 0 and after.getitem(spot) == 0:
+                    record(spot, 0)
+
+            # each eater grows a tile   
+            growth = tiles[i:i + len(eaters)]
+            if len(growth) != len(eaters):
+                raise ValueError(f"move {move} needs growth tiles")
+            for tile in growth:
+                spot = Board.spaces[tile - 1]
+                after.setitem(spot, player)
+                record(spot, player)
+ 
+            board = after
+            i += len(eaters)
+ 
+        return "".join(output)
+
+    def eat_round(self, board, player):
+        """
+        Same eating logic as in generate_moves, to help unpack moves into placements
+        """
+        bugs = []
+        for spot in board.spaces:
+            if board.getitem(spot) != 0 and not any(spot in b.indexes for b in bugs):
+                g = Group(spot, board, bugs)
+                g.expand()
+                bugs.append(g)
+    
+        eaters = [b for b in bugs if b.color == player and b.try_eat()]
+        while True:
+            after = board.copy()
+            for bug in eaters:
+                for victim in bug.try_eat():
+                    victim.disassemble(after)
+            stuck = [b for b in eaters if not b.try_grow(after)]
+            if not stuck:
+                return eaters, after
+            eaters.remove(stuck[0])
 
     def do_move(self, position: int, move: int) -> int:
         """
         Returns the resulting position of applying move to position.
         """
-        # you get a position like 101201201201201201200000 (20 digits, first digit is player turn indicator)
-        # 130132 <- means change 34 to 1, which is white, change 12 to black
-        #if no moves left, return 10 for white win, or 20 for black win
-
-        # MANLIN'S PART FEEL
-        # assume we get a 121122 etc. as valid placements for the current player type.
-        # ******NEED TO HAVE A FUNCTION THAT UNPACKS THE ABOVE INTO THE MORE DETAILED MOVE AS DESCRIBED 3 LINES UP*****
-        # the above is samantha's part!
-
-        player_turn = 0 if len(str(position)) == 19 or 1 else len(str(position)) == 1
+        # you get a position like 101201201201201201200 (20 digits, first digit is player turn indicator)
+        # 234312 <- means change 34 to 2, which is white, change 12 to black
+        # if no moves left, return 10 for white win, or 20 for black win <- goes in primitive 
 
         pos_str = str(position)
-        pos_str_clean = pos_str[1:] if player_turn == 1 else pos_str[:] #remove player info because we don't need it for now
-        tilenum_to_chari = {'11':0, '12':2, '13':4} #etc finish this out cbb / this converts the 3:3 gui format to the actual index position in the pos_string
+        player_turn = 1 if len(pos_str) == 20 else 0
 
-        triplets = [pos_str[i : i + 3] for i in range(0, len(pos_str), 3)]
+        # convert move to changes
+        move_str = self.unpack(position, move)
+
+        pos_str_clean = pos_str[1:] if player_turn == 1 else pos_str.zfill(19) #remove player info because we don't need it for now
+
+        # this converts the 3:3 gui format to the actual index position in the pos_string
+        # order reversed to work with Board class
+        tilenum_to_chari = {'11':18, '12':17, '13':16, 
+                            '21':15, '22':14, '23':13, '24':12,
+                            '31':11, '32':10, '33':9, '34':8, '35': 7, 
+                            '41':6, '42':5,'43':4, '44':3,
+                            '51':2,'52':1,'53':0} 
+
+        triplets = [move_str[i : i + 3] for i in range(0, len(move_str), 3)] # changed from pos_str to move str
         changes_in_order = {tile[1] + tile[2] : tile[0] for tile in triplets}
 
         #iterate through the list of needed changes and apply them to the position string, allowing for multiple updates to the same tile
         for tile in changes_in_order:
-            #if at very end, want to avoid indexing error
-            if tile == "44":
-                pos_str_clean= pos_str_clean[:tilenum_to_chari[tile]] + changes_in_order[tile]
-            else:
-                pos_str_clean = pos_str_clean[:tilenum_to_chari[tile]] + changes_in_order[tile] + pos_str_clean[tilenum_to_chari[tile] + 1:]
+            pos_str_clean = pos_str_clean[:tilenum_to_chari[tile]] + changes_in_order[tile] + pos_str_clean[tilenum_to_chari[tile] + 1:]
 
 
         #swap player turn
@@ -273,10 +347,10 @@ class Bug(Game):
         """
         Returns a Value enum which defines whether the current position is a win, loss, or non-terminal.
         """
-        if position == 10 or position == 20:
+        if self.generate_moves(position=position) == []:
             return Value.Win
         return None
-
+    
     def to_string(self, position: int, mode: StringMode) -> str:
         """
         Returns a string representation of the position based on the given mode.
