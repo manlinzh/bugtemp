@@ -151,7 +151,7 @@ class Group:
 
 class Bug(Game):
     id = 'bug'
-    variants = ["regular"]
+    variants = ["regular", "test"]
     n_players = 2
     cyclic = False
 
@@ -197,7 +197,18 @@ class Bug(Game):
         (6 rotations x 2 reflections) so symmetric positions are solved only once.
         The game rules are symmetric: bug shapes are compared up to rotation/reflection.
         """
-        return self._canonical(position)[1]
+        return self._compact(self._canonical(position)[1])
+
+    def _compact(self, position: int) -> int:
+        """
+        Database key for a position: the 19 cell digits read as a base-3 number, times 2,
+        plus 1 if it is player 1's turn. Always below 2.4 billion, so it fits in a SQLite
+        INTEGER (a raw position can be up to 1.2 * 10^19, which does not fit in 64 bits).
+        """
+        s = str(position)
+        if len(s) == 20:
+            return int(s[1:], 3) * 2 + 1
+        return int(s.zfill(19), 3) * 2
 
     def _canonical(self, position: int) -> tuple[int, int]:
         """
@@ -226,7 +237,15 @@ class Bug(Game):
         return best_t, int(prefix + best)  # type: ignore
 
     def unhash_ext(self, hashed_pos: int) -> int:
-        return hashed_pos
+        """
+        Turns a database key from hash_ext back into a position (in standard orientation).
+        """
+        board, player1 = divmod(hashed_pos, 2)
+        digits = ""
+        for _ in range(19):
+            board, d = divmod(board, 3)
+            digits = str(d) + digits
+        return int(("1" if player1 else "") + digits)
 
     def _generate_moves(self, position: int) -> list[int]:
         # First, eat all the bugs
