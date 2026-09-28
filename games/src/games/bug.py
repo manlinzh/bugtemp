@@ -95,7 +95,7 @@ class Group:
         for _ in range(6):
             if self.board.normalize(shape) == target or self.board.normalize([(k, j, i) for i, j, k in shape]) == target:
                 return True
-            shape = [self.board.canon((-k, i, j)) for i, j, k in shape]
+            shape = [self.board.untangle((-k, i, j)) for i, j, k in shape] # TEST
         return False
 
     def try_eat(self):
@@ -245,14 +245,14 @@ class Bug(Game):
         s = str(move)
         player = int(s[0])
         # take every tile to be changed
-        tiles = [int(s[i:i+2]) for i in range(2, len(s), 2)]
+        tiles = [int(s[i:i+2]) for i in range(1, len(s), 2)]
         board = Board(position, [])
         output = []
 
         # save all placed tiles to output
         def record(spot, value):
             tile_index = Board.spaces.index(spot) 
-            output.append(str(value) + self.TILE_IDS[tile_index])
+            output.append(str(value) + TILE_IDS[tile_index])
 
         # first tile is ordinary placement, the rest are growths
         spot = Board.spaces[tiles[0] - 1]
@@ -280,6 +280,7 @@ class Bug(Game):
                 record(spot, player)
  
             board = after
+            # print(board) TEST
             i += len(eaters)
  
         return "".join(output)
@@ -347,7 +348,7 @@ class Bug(Game):
         """
         Returns a Value enum which defines whether the current position is a win, loss, or non-terminal.
         """
-        if self.generate_moves(position=position) == []:
+        if self.generate_moves(position) == []:
             return Value.Win
         return None
     
