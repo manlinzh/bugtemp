@@ -368,7 +368,7 @@ class Bug(Game):
         return None
     
     ROWS = [3, 4, 5, 4, 3]
-    FILL = {'0': ' ', '1': 'W', '2': 'B'}
+    FILL = {'0': '🟡', '1': '⚪', '2': '⚫'}
     # LABELS[i] is the row+column ID of Board.spaces[i] (rows 1-5 top to bottom,
     # columns counted from 1 at the left of each row), same as TILE_IDS in unpack
     LABELS = [f"{r}{c}" for r, n in enumerate(ROWS, 1) for c in range(1, n + 1)]
@@ -378,7 +378,7 @@ class Bug(Game):
         Returns a string representation of the position based on the given mode.
         """
         if mode != StringMode.TUI:
-            return str(position)
+                return str(position)
         digits = str(position).zfill(20)[-19:][::-1]
         P, H = 10, 4
         edge = "'-._____.-"
@@ -387,16 +387,22 @@ class Bug(Game):
         for r, n in enumerate(self.ROWS):
             y, x0 = r * H, (5 - n) * P // 2
             for c in range(n):
-                x, f = x0 + c * P, self.FILL[digits[t]]
-                body = [f * 9, f"{f*2} {self.LABELS[t]:^3} {f*2}", f * 9]
-                for k, line in enumerate(body):
-                    canvas[y+1+k][x:x+P+1] = list('|' + line + '|')
+                x = x0 + c * P
+                e = [self.FILL[digits[t]], '']      # one emoji = 2 columns
+                solid = ['|'] + e*2 + [' '] + e*2 + ['|']
+                label = ['|'] + e + list(f" {self.LABELS[t]:^3} ") + e + ['|']
+                canvas[y+1][x:x+P+1] = solid
+                canvas[y+2][x:x+P+1] = label
+                canvas[y+3][x:x+P+1] = solid
                 cx = x + P // 2
                 for i in range(P + 1):
                     canvas[y][x+i]   = edge[(x + i - cx) % P]
                     canvas[y+H][x+i] = edge[(x + i - cx + P//2) % P]
                 t += 1
-        return "\n".join("".join(row).rstrip() for row in canvas)
+
+        currentPlayer = 'BLACK ⚫' if len(str(position)) <20 else 'WHITE ⚪'
+
+        return "\n".join("".join(row).rstrip() for row in canvas) + f'\n\n Current player: {currentPlayer} \n'
 
     def from_string(self, strposition: str) -> int:
         """
